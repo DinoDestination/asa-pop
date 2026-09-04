@@ -24,10 +24,40 @@ the point of the reporter running there rather than us connecting in, and it
 makes this strictly safer than the RCON *claim* flow, which does ask an owner to
 open a port to us.
 
+## For an owner: download, double-click, type the password
+
+Run with **no arguments and no usable config** — which is what double-clicking a
+fresh download does — and it opens a guided check. It asks for the RCON port
+(default 27020) and the password, runs the probe, prints the result in plain
+language, and **pauses** so the window does not close before the owner can read
+and copy it. No command line, no flags, no `cd`.
+
+That single pause is load-bearing: double-clicking a console program on Windows
+opens a window that closes the instant it exits, so without it the whole output
+flashes past and the flow is useless while looking like it worked.
+`TestGuidedAlwaysPauses` covers every exit from it.
+
+**The password is not echoed, and that is a requirement rather than a polish.**
+The flow ends with "copy what it shows and send it to us", so an echoed password
+would sit in the same window as the text the owner is about to paste into a
+support channel — the usability change would have introduced a credential leak
+into the support path, on a tool whose entire pitch is that we never receive the
+password. Masking uses the Windows console API through Go's own `syscall`
+package, so there is still no third-party dependency.
+
+**The scheduled task can never reach that prompt.** It runs the same command
+line — no arguments — so the two are told apart by whether stdin is a console. A
+task started by schtasks has none, so a config that goes missing makes it fail
+loudly in the log rather than block on input that never arrives, every five
+minutes, forever, accumulating processes on a game server. `ChooseMode` is a
+pure function and `TestNonInteractiveIsNeverGuided` asserts it across every
+combination of state.
+
 ## Usage
 
 ```
-asa-pop.exe --probe        check RCON, print the shape of the reply, report nothing
+(double-click)             guided check, when there is no usable config yet
+asa-pop.exe --probe        the same check for technical users, from a shell
 asa-pop.exe --probe --raw  the same, without redacting names and ids (local only)
 asa-pop.exe                read the config, report once, exit
 asa-pop.exe --install      scheduled task, every 5 minutes, survives a reboot

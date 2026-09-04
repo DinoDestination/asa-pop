@@ -155,20 +155,39 @@ func main() {
 	)
 	flag.Parse()
 
-	if *showVer {
+	// THE STATE, GATHERED ONCE, and the decision made by a pure function that
+	// is tested without any of it. `configUsable` is the question that matters:
+	// a config file that exists but cannot actually report is somebody midway
+	// through setup, not somebody with a working install.
+	cfg, _, cfgErr := loadConfig()
+	hasConfig := cfgErr == nil
+	configUsable := false
+	if hasConfig {
+		for _, s := range cfg.Servers {
+			if s.Key != "" && s.Password != "" {
+				configUsable = true
+				break
+			}
+		}
+	}
+
+	switch ChooseMode(
+		Flags{Probe: *probe, Raw: *raw, Install: *install, Uninstall: *uninstall, Version: *showVer},
+		hasConfig, configUsable, stdinIsConsole(),
+	) {
+	case ModeVersion:
 		fmt.Println(userAgent + version)
-		return
-	}
-	if *install {
+	case ModeInstall:
 		os.Exit(doInstall())
-	}
-	if *uninstall {
+	case ModeUninstall:
 		os.Exit(doUninstall())
-	}
-	if *probe {
+	case ModeProbe:
 		os.Exit(doProbe(*raw))
+	case ModeGuided:
+		os.Exit(doGuided())
+	default:
+		os.Exit(doReport())
 	}
-	os.Exit(doReport())
 }
 
 // ---------------------------------------------------------------------------
