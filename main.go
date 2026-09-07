@@ -75,8 +75,12 @@ func configPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(exe), "asa-pop.json"), nil
+	return filepath.Join(filepath.Dir(exe), logConfigName), nil
 }
+
+// The config's filename, named once so the log can refer to it by the same
+// string the code opens.
+const logConfigName = "asa-pop.json"
 
 func loadConfig() (*Config, string, error) {
 	path, err := configPath()
@@ -329,13 +333,25 @@ func doReport() int {
 	}
 
 	failed := 0
+	// Said at most once per run, however many servers fail to log. See
+	// `writeLog`: a broken log must not bury the lines it exists to record.
+	logComplained := false
+
 	for i, s := range cfg.Servers {
 		label := s.Name
 		if label == "" {
 			label = fmt.Sprintf("server %d", i+1)
 		}
+
+		// EVERY BRANCH BELOW WRITES EXACTLY ONE LINE, success and failure
+		// alike. A log that only recorded failures could not tell "working"
+		// from "not running at all" - and "not running at all" is the likely
+		// one here, because the scheduled task only runs while somebody is
+		// logged in. See install.go.
 		if s.Key == "" || s.Password == "" {
 			fmt.Printf("%s  %s: not configured (needs a key and a password)\n", stamp(), label)
+			writeLog(LogLine(stamp(), label, "not-configured", nil,
+				"needs a key and a password in "+logConfigName), &logComplained)
 			failed++
 			continue
 		}
@@ -343,6 +359,10 @@ func doReport() int {
 		text, _, outcome := ListPlayers(s.Host, s.Port, s.Password, rconTimeout)
 		if outcome != OutcomeOK {
 			fmt.Printf("%s  %s: %s - %s\n", stamp(), label, outcome, Explain(outcome))
+			// `Explain` is our own text and quotes nothing that was sent - the
+			// outcome codes exist so a failure can be described without
+			// repeating the credential that produced it.
+			writeLog(LogLine(stamp(), label, string(outcome), nil, Explain(outcome)), &logComplained)
 			failed++
 			continue
 		}
@@ -351,6 +371,16 @@ func doReport() int {
 		if !ok {
 			fmt.Printf("%s  %s: the reply was not a player list we understood - reporting nothing. "+
 				"Run --probe and send us the output.\n", stamp(), label)
+			// THE ONE PLACE SERVER TEXT REACHES THE LOG, and the only place it
+			// is any use: this branch means ASA answered in a shape the counter
+			// does not recognise, and the shape IS the diagnostic.
+			//
+			// Through `Redact` first, so a roster becomes a count of redacted
+			// lines rather than a list of who was playing. Through `logSafe`
+			// after, so a reply containing newlines cannot forge entries in
+			// this file.
+			writeLog(LogLine(stamp(), label, "not-understood", nil,
+				"reply not recognised: "+Redact(text)), &logComplained)
 			failed++
 			continue
 		}
@@ -359,10 +389,13 @@ func doReport() int {
 			// THE KEY IS NEVER IN THIS LINE. A log is the one place people
 			// paste into a support thread.
 			fmt.Printf("%s  %s: counted %d, but the report was refused: %v\n", stamp(), label, n, err)
+			writeLog(LogLine(stamp(), label, "not-reported", &n,
+				"the report was refused: "+err.Error()), &logComplained)
 			failed++
 			continue
 		}
 		fmt.Printf("%s  %s: reported %d\n", stamp(), label, n)
+		writeLog(LogLine(stamp(), label, "ok", &n, "reported"), &logComplained)
 	}
 
 	if failed > 0 {

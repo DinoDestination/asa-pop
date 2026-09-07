@@ -53,6 +53,15 @@ minutes, forever, accumulating processes on a game server. `ChooseMode` is a
 pure function and `TestNonInteractiveIsNeverGuided` asserts it across every
 combination of state.
 
+**The task runs as you, and only while you are logged on.** That is measured,
+not assumed: a task created with the exact arguments `--install` passes reports
+`LogonType = Interactive`. So a reboot with nobody logging back in stops the
+reporting, and the log stops gaining lines rather than recording a failure —
+which is why the last line's timestamp is the thing to look at. Making it run
+regardless needs a Windows password at an Administrator prompt, so `--install`
+does not do it silently; the tick-box is in Task Scheduler and the install
+output says where.
+
 ## Usage
 
 ```
@@ -60,7 +69,7 @@ combination of state.
 asa-pop.exe --probe        the same check for technical users, from a shell
 asa-pop.exe --probe --raw  the same, without redacting names and ids (local only)
 asa-pop.exe                read the config, report once, exit
-asa-pop.exe --install      scheduled task, every 5 minutes, survives a reboot
+asa-pop.exe --install      scheduled task, every 5 minutes (while you are logged on)
 asa-pop.exe --uninstall    remove it
 asa-pop.exe --version
 ```
@@ -83,6 +92,43 @@ asa-pop.exe --version
 
 `host` and `port` default to `127.0.0.1:27020`. One entry per server; one key
 per server, so revoking one does not touch the others.
+
+## The log
+
+`asa-pop.log`, beside the binary and beside `asa-pop.json`. Every **reporting**
+run — the scheduled one, and `asa-pop.exe` with no flags — appends one line per
+server, whether it worked or not. `--probe` writes nothing: it prints to a
+window somebody is already looking at, and it is run by hand rather than by a
+schedule nobody is watching.
+
+```
+2026-09-06 14:03:11  The Island                ok              count=7      reported
+2026-09-06 14:03:11  Ragnarok                  bad-credential  count=-      the server answered and REFUSED the password. The host and port are right. Check ServerAdminPassword in GameUserSettings.ini.
+2026-09-06 14:08:11  The Island                ok              count=6      reported
+```
+
+**Successes are in there too, and that is the point.** A file that only records
+failures cannot tell "working" from "not running at all" — and not running at
+all is the likely failure, because the scheduled task only runs while you are
+logged on. The last timestamp is the answer to "is this thing still alive", and
+it only exists if a good run writes one.
+
+`count=-` means the count is not known, never zero. "Nobody is on" and "we
+could not read the answer" stay different states here exactly as they do
+everywhere else in this program.
+
+**What is never in it:** the RCON password, any player name, any player id. A
+reply the counter did not understand is logged through the same `Redact` the
+probe uses, so what lands is the shape of the answer and not who was on. Every
+field is also flattened to one line before it is written — a server's reply is
+not our text, and a reply carrying newlines could otherwise write entries that
+look exactly like real ones.
+
+It caps itself at 256 KB (roughly three weeks for a twelve-map cluster), trims
+the oldest entries at a line boundary, and says in the file that it did. It is
+created `0600`. If it cannot be written at all — read-only folder, full disk —
+the run says so once and **reports anyway**: the count is the product, the log
+is how you check on it.
 
 ## Three decisions worth knowing about
 

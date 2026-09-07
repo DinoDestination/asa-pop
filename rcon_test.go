@@ -23,6 +23,14 @@ func startControl(t *testing.T, password string, players int) string {
 	if players > 0 {
 		body = roster(players)
 	}
+	return startControlBody(t, password, body)
+}
+
+// The same control, answering a body the caller chose. The log tests need a
+// reply the counter REJECTS while the redactor still has roster lines to scrub,
+// which is not expressible as a player count.
+func startControlBody(t *testing.T, password, body string) string {
+	t.Helper()
 
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

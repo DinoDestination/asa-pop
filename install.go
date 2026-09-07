@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -13,10 +14,12 @@ import (
 // is where installs die. `schtasks` is already how this project runs its own
 // ingest on Windows, so it is the same pattern one level out.
 //
-// EVERY FIVE MINUTES, FOREVER, AND IT SURVIVES A REBOOT. The site treats a
-// count as live for 25 minutes - five missed reports - so a blip costs nothing
-// and a machine that is genuinely off stops showing a number rather than
-// freezing its last one.
+// EVERY FIVE MINUTES, AND THE TASK SURVIVES A REBOOT - but it only RUNS while
+// the installing user is logged on, which is measured rather than assumed and
+// is written out beside the arguments below. The site treats a count as live
+// for 25 minutes - five missed reports - so a blip costs nothing and a machine
+// that is genuinely off stops showing a number rather than freezing its last
+// one.
 
 const taskName = "Dino Destination population reporter"
 
@@ -61,9 +64,27 @@ func doInstall() int {
 		"/TR", `"` + exe + `"`,
 		"/SC", "MINUTE",
 		"/MO", "5",
-		// RUNS WHETHER OR NOT ANYBODY IS LOGGED IN. A game server box is on
-		// 24/7 with nobody at the console, and a task that only runs at logon
-		// would report for the ten minutes after a reboot and then stop.
+		// LOGGED-ON ONLY, AND THAT IS MEASURED RATHER THAN INTENDED.
+		//
+		// This comment used to read "RUNS WHETHER OR NOT ANYBODY IS LOGGED IN".
+		// It was false. A throwaway task created with exactly this argument
+		// list reports Principal.LogonType = Interactive and UserId = the
+		// installing user, so it does not run while nobody is logged on. After
+		// a reboot with no login there are no reports and no log lines saying
+		// why - the silent failure the log exists to make visible, wearing a
+		// comment that said it could not happen.
+		//
+		// THE ARGUMENTS ARE STILL RIGHT FOR AN UNELEVATED INSTALL, which is why
+		// the comment changed and they did not. Measured on Windows 11 without
+		// elevation: "/RU <user> /NP" and "/RU SYSTEM" both fail with "Access
+		// is denied", and "/NP" first prompts for a password on stdin - which
+		// exec.Command does not supply, so it would hang rather than fail.
+		// Run-whether-logged-on needs an Administrator prompt, and that is a
+		// decision for whoever installs this rather than one to take on their
+		// behalf.
+		//
+		// What it costs is printed after the install, because an owner who
+		// leaves the box logged out has to know the reporting stops.
 		"/RL", "LIMITED",
 	}
 
@@ -77,6 +98,14 @@ func doInstall() int {
 	fmt.Printf("Installed. \"%s\" now runs every 5 minutes.\n", taskName)
 	fmt.Printf("  program : %s\n", exe)
 	fmt.Printf("  config  : %s\n", path)
+	fmt.Printf("  log     : %s\n", filepath.Join(filepath.Dir(exe), logName))
+	fmt.Println("\nONE THING TO KNOW: the task runs as you, and only while you are")
+	fmt.Println("logged on. If this machine reboots and nobody logs in, reporting")
+	fmt.Println("stops until somebody does - the log will simply have no new lines.")
+	fmt.Println("To have it run regardless, open Task Scheduler, find")
+	fmt.Printf("  %q,\n", taskName)
+	fmt.Println("and tick \"Run whether user is logged on or not\". Windows asks for")
+	fmt.Println("your password to do that, which is why this program does not.")
 	fmt.Println("\nRemove it any time with:  asa-pop.exe --uninstall")
 	fmt.Println("Your listing shows a live count within about five minutes.")
 	return 0
