@@ -157,12 +157,19 @@ reproducible, so the published SHA256 is checkable against the source:
 
 ```
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -trimpath -ldflags "-s -w -X main.version=v0.1.0" -o asa-pop.exe .
+  go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=v0.1.0" -o asa-pop.exe .
 ```
 
-Go 1.27.1, pinned in `.github/workflows/reporter-release.yml`. Two builds from a
-cleaned module cache produce an identical hash; `pnpm reporter:verify` rebuilds
-the published tag and compares.
+Go 1.27.1, pinned in `.github/workflows/reporter-release.yml`.
+
+`-buildvcs=false` is not tidiness. Go stamps `vcs.revision`, `vcs.time` and
+`vcs.modified` into anything built inside a git checkout, so the same files
+built from a copy produced a **different** hash — measured, `dcf70ff3…` against
+`f33f4c5a…`. Without the flag "build it yourself and you get the same bytes" is
+false for everybody who is not standing in the exact working tree the release
+was cut from, and the binary carries a commit id besides.
+
+`pnpm reporter:verify` rebuilds the published tag and compares.
 
 ```
 go vet ./... && go test ./...
