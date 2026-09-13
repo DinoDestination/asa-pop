@@ -132,7 +132,7 @@ If you run more than one map on this same computer, answer **y** to the third
 question and it'll ask again for the next one. Otherwise press Enter.
 
 **7. If it says `WORKED`, you're past the hard part.** If it says `DID NOT
-WORK`, the line underneath explains why — and the three most common reasons are
+WORK`, the line underneath explains why — and the common reasons are
 [at the bottom of this page](#when-it-doesnt-work) with fixes.
 
 **8. Say yes when it offers to save your settings.** Press Enter. It writes a
@@ -251,7 +251,7 @@ are recent but say something other than `ok`, the server side is the problem.
 
 ## When it doesn't work
 
-Three failures account for nearly all of them.
+Four failures account for nearly all of them.
 
 ### "DID NOT WORK" and something about the port being closed
 
@@ -285,6 +285,28 @@ run the program again and retype it slowly.
 
 **Also check** — you're using `ServerAdminPassword`, not your server's join
 password and not your own account password. They're three different things.
+
+### It worked for weeks, then stopped — "That key is not one of ours"
+
+**Means** — your key was replaced. The count stops arriving and your listing
+goes stale within 25 minutes. `asa-pop.log` shows the reason on every line from
+the moment it happened.
+
+**Usually** — **somebody issued you a new key.** Keys are one per map and
+issuing replaces the old one immediately, with no overlap, which is deliberate:
+a key that keeps working after it has been rotated is not rotated. So this is
+the normal, expected result of a re-issue rather than a fault.
+
+**Two ways it happens.** We re-issued at your request, or because a key was
+exposed — you'll have heard from us. Or you pressed a button on your own
+dashboard that issued keys: at the time of writing there is no such control, but
+when there is, using it replaces whatever you already have. That is the case
+worth knowing about, because nothing on screen will connect the two.
+
+**Fix** — paste the new keys into `asa-pop.json`, one per map, save, and it
+resumes on the next five-minute check. Nothing else in the file changes and you
+don't need to re-run anything. If you don't have new keys, ask us — we can
+reprint the current ones without changing them.
 
 ### Nothing happens — a window flashes and vanishes
 
