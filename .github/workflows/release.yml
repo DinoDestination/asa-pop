@@ -10,7 +10,9 @@
 # THE BUILD IS REPRODUCIBLE AND THAT IS THE POINT. Pinned toolchain, -trimpath,
 # -buildvcs=false, CGO off. Anybody with the same Go version can rebuild the tag
 # and get the same bytes, so "this .exe is that source" is checkable rather than
-# asserted - `pnpm reporter:verify` does exactly that.
+# asserted - and since this repository is public, checkable BY THE PERSON
+# DOWNLOADING IT rather than only by us. The release notes carry the exact
+# command line.
 #
 # THIS USED TO SAY "verified locally: two builds from a cleaned cache produced
 # an identical SHA256". That was true and it proved less than it looked: both
@@ -93,16 +95,7 @@ jobs:
           # is the shape of that bug, and it outlives the prefix going away.
           VERSION="${GITHUB_REF_NAME}"
           go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${VERSION}" -o asa-pop.exe .
-          # CARRIED, NOT RE-DERIVED, because the notes quote it back.
-          #
-          # The release notes used to tell an owner to rebuild with
-          # `-X main.version=<github.ref_name>` - the FULL tag, where this step
-          # strips the `reporter-` prefix. Different string, different bytes,
-          # different SHA256. Anybody who actually followed the published
-          # instruction got a mismatch, and the only honest conclusion available
-          # to them was that the download is not this source - on the one
-          # paragraph whose whole job is "you do not have to take our word for
-          # it". Two expressions for one value, and they disagreed.
+          # CARRIED, NOT RE-DERIVED - see above.
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       # SHA256 IS PUBLISHED AS A FILE AND IN THE NOTES. An owner checking a
