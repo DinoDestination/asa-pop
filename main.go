@@ -154,11 +154,16 @@ func main() {
 		probe     = flag.Bool("probe", false, "check RCON and print the shape of the reply, without reporting anything")
 		raw       = flag.Bool("raw", false, "with --probe, show player names and ids (local only - do not paste this)")
 		wire      = flag.Bool("wire", false, "with --probe, print every RCON packet sent and received (the password is never shown)")
+		endFix    = flag.Bool("end-fix", false, "EXPERIMENTAL: send the end-of-response marker as a separate round trip, and accept a reply that arrives without one")
 		install   = flag.Bool("install", false, "create a scheduled task that runs this every 5 minutes")
 		uninstall = flag.Bool("uninstall", false, "remove that scheduled task")
 		showVer   = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()
+	// A PACKAGE-LEVEL SWITCH, because every call site would otherwise grow a
+	// parameter for an experiment we intend to delete or default within the
+	// week. It is read in exactly one place, `probeOpts`.
+	endFixOn = *endFix
 
 	// THE STATE, GATHERED ONCE, and the decision made by a pure function that
 	// is tested without any of it. `configUsable` is the question that matters:
@@ -246,7 +251,7 @@ func doProbe(raw bool, wire bool) int {
 		if wire {
 			w = NewWire()
 		}
-		text, shape, outcome := ListPlayersWire(s.Host, s.Port, s.Password, rconTimeout, w)
+		text, shape, outcome := ListPlayersOpts(s.Host, s.Port, s.Password, rconTimeout, probeOpts(w))
 		fmt.Printf("    outcome : %s - %s\n", outcome, Explain(outcome))
 
 		// BEFORE THE EARLY RETURN, because a failure is when these matter.
@@ -374,8 +379,11 @@ func doReport() int {
 			continue
 		}
 
-		text, _, outcome := ListPlayers(s.Host, s.Port, s.Password, rconTimeout)
-		if outcome != OutcomeOK {
+		text, _, outcome := ListPlayersOpts(s.Host, s.Port, s.Password, rconTimeout, probeOpts(nil))
+		// A REPLY WITH NO END MARKER IS STILL A REPLY. It is reported, and the
+		// log line carries the outcome so "unconfirmed" is visible rather than
+		// rounded up to success.
+		if outcome != OutcomeOK && outcome != OutcomeNoEndMarker {
 			fmt.Printf("%s  %s: %s - %s\n", stamp(), label, outcome, Explain(outcome))
 			// `Explain` is our own text and quotes nothing that was sent - the
 			// outcome codes exist so a failure can be described without
@@ -433,3 +441,24 @@ const sampleConfig = `{
     }
   ]
 }`
+
+// endFixOn is set once from --end-fix and read by probeOpts. Experimental and
+// default OFF: nothing changes for the twelve owners already reporting until a
+// real server's bytes say this is the right fix.
+var endFixOn bool
+
+// endQuiet is how long silence means "that was the whole reply". Long enough to
+// cover a slow frame on loopback, short enough that twelve servers do not add a
+// minute to a run.
+const endQuiet = 400 * time.Millisecond
+
+// probeOpts is the ONE place the experiment is turned into options, so the
+// probe path and the reporting path cannot end up testing different things.
+func probeOpts(w *Wire) Opts {
+	return Opts{
+		Wire:             w,
+		SeparateSentinel: endFixOn,
+		EndOnQuiet:       endFixOn,
+		Quiet:            endQuiet,
+	}
+}

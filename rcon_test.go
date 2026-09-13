@@ -274,6 +274,9 @@ func TestEveryOutcomeExplainsItself(t *testing.T) {
 	all := []Outcome{
 		OutcomeOK, OutcomeBadCredential, OutcomePortClosed,
 		OutcomeUnreachable, OutcomeTimeout, OutcomeWrongProtocol, OutcomeOurFault,
+		// 0.1.5: added with --end-fix. An outcome missing from this list has no
+		// message test at all, which is how a stub would ship.
+		OutcomeNoEndMarker,
 	}
 	seen := map[string]Outcome{}
 	for _, o := range all {

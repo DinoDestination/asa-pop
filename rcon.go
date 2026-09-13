@@ -67,6 +67,12 @@ const (
 	OutcomeTimeout       Outcome = "timeout"
 	OutcomeWrongProtocol Outcome = "wrong-protocol"
 	OutcomeOurFault      Outcome = "our-fault"
+	// The server answered in full and never sent an end marker. Only reachable
+	// with --end-fix, and DELIBERATELY NOT OutcomeOK: we are returning a reply
+	// we believe is complete without the proof we normally require, and the one
+	// thing this counter may never do is report a number it cannot stand behind
+	// as though it were certain.
+	OutcomeNoEndMarker Outcome = "no-end-marker"
 )
 
 // Explain returns the sentence an owner reads in a log they will open exactly
@@ -101,6 +107,10 @@ func Explain(o Outcome) string {
 	case OutcomeTimeout:
 		return "something is listening but did not finish the exchange. A firewall that drops " +
 			"rather than refuses looks exactly like this."
+	case OutcomeNoEndMarker:
+		return "the server answered and never sent an end-of-response marker, so the reply " +
+			"was taken as complete when the socket went quiet. The count is probably right; " +
+			"it is reported as unconfirmed because a reply cut mid-list would still parse."
 	case OutcomeWrongProtocol:
 		// THIS SAID "Your password was NOT sent anywhere" AND THAT WAS FALSE.
 		//
@@ -187,18 +197,52 @@ type Shape struct {
 	Split  bool
 }
 
+// Opts is how a run differs from the default, so the next experiment adds a
+// field rather than a positional parameter - `doProbe` grew one of those and
+// broke five call sites that vet had to find.
+type Opts struct {
+	Wire *Wire
+	// SeparateSentinel sends the end marker only AFTER the first response frame
+	// has arrived, instead of immediately behind the command.
+	//
+	// THE DEFAULT WRITES BOTH BACK TO BACK WITH NoDelay, so they routinely reach
+	// the server coalesced in one TCP segment - and a server that reads one
+	// packet per recv handles the command, replies, and never sees the marker.
+	// A full round trip between the two makes that impossible. It costs one RTT
+	// against a loopback address, which is microseconds.
+	SeparateSentinel bool
+	// EndOnQuiet returns what has arrived if the marker never comes and the
+	// socket then stays silent for Quiet.
+	//
+	// THE BACKSTOP, NOT THE MECHANISM, and the distinction matters. A pause
+	// between frames of a split reply is indistinguishable from the end of one,
+	// so this is the only design here that can undercount - and a truncation
+	// landing on a newline parses cleanly, which is why the counter cannot spot
+	// it afterwards. It returns OutcomeNoEndMarker so the number is never passed
+	// off as confirmed.
+	EndOnQuiet bool
+	Quiet      time.Duration
+}
+
 // ListPlayers authenticates, runs one read-only command, and returns the WHOLE
 // response.
 func ListPlayers(host string, port int, password string, timeout time.Duration) (string, Shape, Outcome) {
-	return ListPlayersWire(host, port, password, timeout, nil)
+	return ListPlayersOpts(host, port, password, timeout, Opts{})
 }
 
-// ListPlayersWire is ListPlayers with an optional wire log. `w` may be nil,
-// which is every path except `--probe --wire`, so the reporting run carries no
-// extra cost and no extra place for a credential to go.
+// ListPlayersWire is ListPlayers with a wire log and nothing else changed.
 func ListPlayersWire(
 	host string, port int, password string, timeout time.Duration, w *Wire,
 ) (string, Shape, Outcome) {
+	return ListPlayersOpts(host, port, password, timeout, Opts{Wire: w})
+}
+
+// ListPlayersOpts is the real one. Everything above is a thin wrapper so a new
+// experiment never rewrites existing call sites.
+func ListPlayersOpts(
+	host string, port int, password string, timeout time.Duration, o Opts,
+) (string, Shape, Outcome) {
+	w := o.Wire
 	// ONE COPY, AND WE OWN IT.
 	secret := []byte(password)
 	defer func() {
@@ -242,6 +286,7 @@ func ListPlayersWire(
 	var buf []byte
 	var parts []string
 	authed := false
+	sentinelSent := false
 	read := make([]byte, 8192)
 
 	for {
@@ -283,10 +328,14 @@ func ListPlayersWire(
 					// THE SENTINEL, SENT IMMEDIATELY AFTER. Source has no "this
 					// is the last frame" bit, so the only reliable end marker is
 					// a packet we sent ourselves coming back after the real ones.
-					sentinelPkt := packet(sentinelID, responseValueType, nil)
-					w.add(true, sentinelPkt, false)
-					if _, err := conn.Write(sentinelPkt); err != nil {
-						return "", shape, OutcomeOurFault
+					// HELD BACK until a response frame proves the server has
+					// finished reading the command, when asked to. Sending it
+					// now is what may be getting it swallowed.
+					if !o.SeparateSentinel {
+						if !writeSentinel(conn, w, sentinelID) {
+							return "", shape, OutcomeOurFault
+						}
+						sentinelSent = true
 					}
 					continue
 				}
@@ -302,6 +351,23 @@ func ListPlayersWire(
 				shape.Frames++
 				shape.Bytes += len(f.body)
 				parts = append(parts, f.body)
+
+				// THE SEPARATE ROUND TRIP. The first response frame is proof the
+				// server consumed the command as its own packet, so the marker
+				// cannot now arrive glued to it.
+				if o.SeparateSentinel && !sentinelSent {
+					if !writeSentinel(conn, w, sentinelID) {
+						return "", shape, OutcomeOurFault
+					}
+					sentinelSent = true
+				}
+				// A SHORT LEASH ONCE THERE IS SOMETHING TO LOSE. Without this the
+				// fallback would wait out the whole 8s deadline before deciding
+				// the marker is not coming, which on twelve servers is the 96
+				// seconds that started all of this.
+				if o.EndOnQuiet && o.Quiet > 0 {
+					_ = conn.SetDeadline(time.Now().Add(o.Quiet))
+				}
 			}
 		}
 
@@ -309,6 +375,12 @@ func ListPlayersWire(
 			var ne net.Error
 			if errors.As(err, &ne) && ne.Timeout() {
 				shape.Split = shape.Frames > 1
+				// NEVER ON AN EMPTY READ. With nothing in hand this is the
+				// timeout it always was; the fallback exists for the case where
+				// the roster arrived and only the marker did not.
+				if o.EndOnQuiet && len(parts) > 0 {
+					return strings.Join(parts, ""), shape, OutcomeNoEndMarker
+				}
 				return "", shape, OutcomeTimeout
 			}
 			// CLOSED WITHOUT AN ANSWER. A game port typically accepts the TCP
@@ -320,4 +392,14 @@ func ListPlayersWire(
 			return "", shape, OutcomeWrongProtocol
 		}
 	}
+}
+
+// writeSentinel builds and sends the end marker. One definition, because the
+// two places that send it differ only in WHEN - and a second hand-written
+// packet is how they would come to differ in what.
+func writeSentinel(conn net.Conn, w *Wire, sentinelID int32) bool {
+	pkt := packet(sentinelID, responseValueType, nil)
+	w.add(true, pkt, false)
+	_, err := conn.Write(pkt)
+	return err == nil
 }
