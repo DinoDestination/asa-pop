@@ -20,8 +20,8 @@ import (
 // nothing; a missing `cd /d` looks exactly like a corrupt download.
 
 const (
-	batchOn  = "Turn on automatic reporting.bat"
-	batchOff = "Turn off automatic reporting.bat"
+	batchOn  = "Turn-on-automatic-reporting.bat"
+	batchOff = "Turn-off-automatic-reporting.bat"
 )
 
 func readBatch(t *testing.T, name string) string {
@@ -91,6 +91,34 @@ func TestBatchFilesAreDoubleClickable(t *testing.T) {
 // written down here: renaming a flag on either side fails, and nothing else in
 // this suite connects the two. Without it, `--install` becoming `--schedule`
 // leaves two double-clickable shortcuts to a usage error.
+// NO SPACES IN EITHER FILENAME, and this is not tidiness.
+//
+// GITHUB RELEASES REWRITES A SPACE TO A DOT. Published as
+// `Turn on automatic reporting.bat`, the asset downloads as
+// `Turn.on.automatic.reporting.bat` - so the release notes, the README and this
+// test all named a file that did not exist at the URL an owner clicks. v0.1.1
+// shipped that way and it was found by fetching the published asset rather than
+// by reading the workflow, which is the only place it is visible.
+//
+// The names are identical in the repository and in the release now, so the one
+// string is checkable in both.
+func TestBatchFileNamesSurviveAGitHubRelease(t *testing.T) {
+	for _, name := range []string{batchOn, batchOff} {
+		if strings.ContainsAny(name, " 	") {
+			t.Errorf("%q contains a space: GitHub Releases will publish it under a "+
+				"different name than the notes and the README give", name)
+		}
+		if !strings.HasSuffix(name, ".bat") {
+			t.Errorf("%q is not a .bat: Windows will not run it on a double-click", name)
+		}
+		// It has to be on disk under exactly this name, or the two assertions
+		// above are about a string nobody ships.
+		if _, err := os.Stat(name); err != nil {
+			t.Errorf("%q is not in the repository: %v", name, err)
+		}
+	}
+}
+
 func TestBatchFilesPassFlagsTheProgramDeclares(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {

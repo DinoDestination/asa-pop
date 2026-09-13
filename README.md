@@ -41,8 +41,8 @@ flashes past and the flow is useless while looking like it worked.
 command line; `--install` did, because a flag cannot be passed by
 double-clicking a program. So the one step that makes this tool actually do its
 job was the one step that required a shell — in a tool whose whole premise is
-that the owner never opens one. `Turn on automatic reporting.bat` and
-`Turn off automatic reporting.bat` ship as release assets beside the binary:
+that the owner never opens one. `Turn-on-automatic-reporting.bat` and
+`Turn-off-automatic-reporting.bat` ship as release assets beside the binary:
 `cd /d "%~dp0"`, the flag, and a `pause`.
 
 They are checked in rather than generated in the workflow, so `batch_test.go`
@@ -91,8 +91,8 @@ asa-pop.exe                read the config, report once, exit
 asa-pop.exe --install      scheduled task, every 5 minutes (while you are logged on)
 asa-pop.exe --uninstall    remove it
 
-Turn on automatic reporting.bat    what an owner double-clicks instead of --install
-Turn off automatic reporting.bat   … and instead of --uninstall
+Turn-on-automatic-reporting.bat    what an owner double-clicks instead of --install
+Turn-off-automatic-reporting.bat   … and instead of --uninstall
 asa-pop.exe --version
 ```
 

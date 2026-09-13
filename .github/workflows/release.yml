@@ -119,8 +119,8 @@ jobs:
           files: |
             asa-pop.exe
             asa-pop.exe.sha256
-            Turn on automatic reporting.bat
-            Turn off automatic reporting.bat
+            Turn-on-automatic-reporting.bat
+            Turn-off-automatic-reporting.bat
           body: |
             Dino Destination population reporter — `${{ github.ref_name }}`
 
@@ -143,10 +143,10 @@ jobs:
             2. Type your `ServerAdminPassword` when it asks. Typing is hidden.
             3. Copy what it shows and send it to us.
             4. We send back a key. Paste it into `asa-pop.json` next to `"key"`.
-            5. **Double-click `Turn on automatic reporting.bat`.** Done — your
+            5. **Double-click `Turn-on-automatic-reporting.bat`.** Done — your
                listing shows a live count within about five minutes.
 
-            No command prompt at any point. `Turn off automatic reporting.bat`
+            No command prompt at any point. `Turn-off-automatic-reporting.bat`
             undoes step 5.
 
             **The two `.bat` files must sit in the same folder as
