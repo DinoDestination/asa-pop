@@ -160,7 +160,7 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
   go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=v0.1.0" -o asa-pop.exe .
 ```
 
-Go 1.27.1, pinned in `.github/workflows/reporter-release.yml`.
+Go 1.27.1, pinned in `.github/workflows/release.yml`.
 
 `-buildvcs=false` is not tidiness. Go stamps `vcs.revision`, `vcs.time` and
 `vcs.modified` into anything built inside a git checkout, so the same files
@@ -169,7 +169,9 @@ built from a copy produced a **different** hash — measured, `dcf70ff3…` agai
 false for everybody who is not standing in the exact working tree the release
 was cut from, and the binary carries a commit id besides.
 
-`pnpm reporter:verify` rebuilds the published tag and compares.
+Every release publishes `asa-pop.exe.sha256` beside the binary, from the same
+build that produced it - a checksum typed into a web page is a checksum from
+whatever that page says.
 
 ```
 go vet ./... && go test ./...

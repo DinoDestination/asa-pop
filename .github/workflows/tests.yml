@@ -1,0 +1,92 @@
+# The Go suite, on every push and every pull request.
+#
+# IT MOVED HERE WITH THE CODE. It lived in the asa-finder monorepo as
+# `reporter-tests.yml`, path-filtered to `packages/reporter/**` so a migration or
+# a CSS change did not spin up a Go toolchain. This repository is nothing but the
+# reporter, so the filter is gone - every push is a reporter change by definition.
+#
+# WHY IT EXISTS AT ALL: `release.yml` runs `go vet` and `go test`, but only on a
+# tag. Without this, the 24 Go tests would run exactly when somebody remembered,
+# which is the defect the tests themselves are written to prevent.
+#
+# The release workflow keeps its own vet and test. That is not redundant: this
+# one says "the code is good", that one says "the artefact somebody downloads was
+# built from code that was good at the moment it was built". Losing either loses
+# something.
+name: tests
+
+on:
+  push:
+    branches: ['**']
+    # The release workflow owns tags. Running both on one tag would build the
+    # same package twice for no extra information.
+    tags-ignore: ['**']
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # PINNED, matching release.yml. A floating version would test
+          # against a toolchain the released binary was not built with, which is
+          # the one difference this pair exists to rule out.
+          go-version: '1.27.1'
+          check-latest: false
+
+      - name: vet
+        run: go vet ./...
+
+      # `-v` SO THE PASSES ARE COUNTABLE. Plain `go test ./...` prints one `ok`
+      # line per package and says nothing about how many tests ran — and a
+      # package whose tests all disappeared still prints `ok`.
+      - name: test
+        run: |
+          set -o pipefail
+          go test -v ./... 2>&1 | tee test-output.txt
+
+      # THE COUNT IS ASSERTED, exactly as tests.yml asserts the node one.
+      #
+      # `go test` exits 0 on a package that defines no tests at all — it prints
+      # "no test files" and succeeds. So a suite that stopped LOADING, a
+      # build-tag mistake that excluded every `_test.go`, or a rename that
+      # orphaned the package, all go green while testing nothing.
+      #
+      # The floor is well below the current number: it is here to catch a suite
+      # that collapsed, not to make a deleted test a build failure. 40 top-level
+      # tests plus table-driven subtests pass as of the probe tests - 39 passing
+      # and one that skips on Windows only, so linux runs all 40. The floor
+      # stays at 28: raising it in step with the suite would turn every deleted
+      # test into a red build, which is a different rule than the one intended.
+      - name: the suite actually ran
+        run: |
+          PASSES=$(grep -c '^--- PASS:' test-output.txt || true)
+          FAILS=$(grep -c '^--- FAIL:' test-output.txt || true)
+          echo "passing: ${PASSES}   failing: ${FAILS}"
+          if [ "${FAILS}" -ne 0 ]; then
+            echo "::error::${FAILS} Go test(s) failed"
+            exit 1
+          fi
+          if [ "${PASSES}" -lt 28 ]; then
+            echo "::error::only ${PASSES} Go tests ran; there were 40 top-level tests when this was written. The suite is not loading."
+            exit 1
+          fi
+
+      # AND IT STILL BUILDS FOR THE TARGET IT SHIPS TO. `go vet` and `go test`
+      # run on linux here; the binary is Windows, and `console_windows.go` is
+      # behind a build constraint that neither of them compiles. Without this a
+      # syntax error in the one file that handles the password prompt would
+      # reach a release tag untouched.
+      - name: it cross-compiles for Windows
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -o /dev/null .

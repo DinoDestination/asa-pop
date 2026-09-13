@@ -1,0 +1,172 @@
+# Build and publish the population reporter.
+#
+# ON A TAG, NEVER ON A PUSH. The reporter is the fourth thing that ships
+# separately (DEPLOY.md), and the whole reason it has its own workflow is that a
+# release must be a deliberate act somebody performs - not a side effect of
+# merging, which is how a half-finished counter reaches every owner's machine.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# THE BUILD IS REPRODUCIBLE AND THAT IS THE POINT. Pinned toolchain, -trimpath,
+# -buildvcs=false, CGO off. Anybody with the same Go version can rebuild the tag
+# and get the same bytes, so "this .exe is that source" is checkable rather than
+# asserted - `pnpm reporter:verify` does exactly that.
+#
+# THIS USED TO SAY "verified locally: two builds from a cleaned cache produced
+# an identical SHA256". That was true and it proved less than it looked: both
+# builds came from the same working tree, so Go's VCS stamps matched by accident
+# of never having moved. Built from a COPY of the same files the hash changed -
+# see the note on -buildvcs=false below, which is what actually makes the claim
+# hold for somebody who is not us.
+#
+# NO UPX. It would halve the download and it is a major antivirus heuristic; an
+# unsigned Go binary that reads a password already starts with enough of a
+# reputation problem.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # PINNED, not a range. `go-version: '1.27'` would silently move to
+          # 1.27.2 and produce different bytes for the same source, which breaks
+          # the one property this whole approach rests on.
+          go-version: '1.27.1'
+          check-latest: false
+
+      # THE TESTS RUN BEFORE THE RELEASE, not after. A tagged build that fails
+      # its own counter tests would be published and downloaded before anybody
+      # looked at the workflow log.
+      - name: vet and test
+        run: |
+          go vet ./...
+          go test ./...
+
+      # -buildvcs=false, AND IT IS THE REPRODUCIBILITY CLAIM RATHER THAN A TIDY-UP.
+      #
+      # Go stamps `vcs.revision`, `vcs.time` and `vcs.modified` into any binary
+      # built inside a git checkout. Two consequences, both measured:
+      #
+      #   1. THE SAME SOURCE BUILT ELSEWHERE PRODUCES DIFFERENT BYTES. Identical
+      #      files, identical flags, identical toolchain, built once inside the
+      #      repo and once from a copy: dcf70ff3... against f33f4c5a.... So an
+      #      owner following "build it yourself and you get the same bytes" got
+      #      a mismatch every time, and the only honest conclusion available to
+      #      them was that the download is not this source.
+      #   2. IT EMBEDDED A COMMIT SHA FROM A PRIVATE REPOSITORY into a binary
+      #      handed to strangers, along with the commit time and a
+      #      `vcs.modified=true` whenever the tree was dirty.
+      #
+      # The earlier note - "two builds from a cleaned cache produced an
+      # identical SHA256" - was true and proved less than it looked: both builds
+      # were from the same working tree, so the stamps matched by accident of
+      # never having moved.
+
+      - name: build
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          # THE TAG IS THE VERSION. In the monorepo this stripped a
+          # `reporter-` prefix that kept it apart from the site's own tags;
+          # here the repository IS the reporter, so the tag is `v0.1.0` and
+          # the derivation is the identity.
+          #
+          # IT IS STILL CARRIED TO THE NOTES RATHER THAN RE-DERIVED. The
+          # notes once said `-X main.version=<github.ref_name>` where the
+          # build used the stripped form: different string, different bytes,
+          # different SHA256, on the one paragraph whose whole job is "you do
+          # not have to take our word for it". Two expressions for one value
+          # is the shape of that bug, and it outlives the prefix going away.
+          VERSION="${GITHUB_REF_NAME}"
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${VERSION}" -o asa-pop.exe .
+          # CARRIED, NOT RE-DERIVED, because the notes quote it back.
+          #
+          # The release notes used to tell an owner to rebuild with
+          # `-X main.version=<github.ref_name>` - the FULL tag, where this step
+          # strips the `reporter-` prefix. Different string, different bytes,
+          # different SHA256. Anybody who actually followed the published
+          # instruction got a mismatch, and the only honest conclusion available
+          # to them was that the download is not this source - on the one
+          # paragraph whose whole job is "you do not have to take our word for
+          # it". Two expressions for one value, and they disagreed.
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      # SHA256 IS PUBLISHED AS A FILE AND IN THE NOTES. An owner checking a
+      # download against a number typed into a web page is checking against
+      # whatever that page says; a checksum file next to the asset comes from
+      # the same build that produced it.
+      - name: checksum
+        run: |
+          sha256sum asa-pop.exe | tee asa-pop.exe.sha256
+          echo "SHA256=$(cut -d' ' -f1 asa-pop.exe.sha256)" >> "$GITHUB_ENV"
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            asa-pop.exe
+            asa-pop.exe.sha256
+          body: |
+            Dino Destination population reporter — `${{ github.ref_name }}`
+
+            A self-hosted ASA server has no player count anywhere we can reach.
+            This runs on **your** machine, asks **your** server over RCON on
+            `127.0.0.1`, and posts the number so your listing can show it.
+
+            **What leaves your machine:** a key and an integer. Your RCON
+            password stays in the config file beside the program — the endpoint
+            has no field that could carry it, and neither does the database
+            behind it.
+
+            ### Setup
+
+            1. Download `asa-pop.exe` and put it in a folder of its own.
+            2. **Double-click it.**
+            3. Type your `ServerAdminPassword` when it asks. Typing is hidden.
+            4. Copy what it shows and send it to us.
+
+            That is the whole thing - no command prompt needed. Technical users
+            can run `asa-pop.exe --probe` from a shell instead, and
+            `--install` once a key is in place.
+
+            RCON is part of a standard ASA setup, so you probably already have
+            `RCONEnabled=True` and `RCONPort=27020` in `GameUserSettings.ini`.
+            The password is your `ServerAdminPassword`.
+
+            ### Windows will warn you
+
+            This build is **not code-signed**, so SmartScreen says "Windows
+            protected your PC". Click **More info → Run anyway**. If you would
+            rather not take our word for it, the whole program is one small Go
+            file with no third-party dependencies and the build is reproducible:
+
+            ```
+            SHA256  ${{ env.SHA256 }}
+            ```
+
+            Build it yourself with Go 1.27.1 and you get the same bytes — this
+            is the exact command line that produced the download above, with the
+            same version string:
+
+            ```
+            git clone https://github.com/${{ github.repository }}.git
+            cd ${{ github.event.repository.name }}
+            git checkout ${{ github.ref_name }}
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+              go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${{ env.VERSION }}" -o asa-pop.exe .
+            sha256sum asa-pop.exe
+            ```

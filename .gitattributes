@@ -1,0 +1,16 @@
+# LF in the repository, on every machine.
+#
+# Carried from the monorepo this split out of, where its absence cost a real
+# failure: a fresh clone on the Windows machine that wrote the code failed a test
+# that same machine's working tree passed, because `core.autocrlf` converted LF
+# to CRLF on checkout and a regex containing `,\n` cannot match `,\r\n`.
+#
+# It matters more here than it did there. `go test` reads golden strings, and
+# `count_test.go` asserts on a reply cut at a 4096-byte frame boundary - a test
+# whose entire subject is exact bytes. A line ending is a byte.
+* text=auto eol=lf
+
+# Binary, explicitly. `text=auto` gets this right by sniffing and a misdetected
+# binary is a corrupted one - the failure here that does not announce itself.
+*.exe binary
+*.png binary
