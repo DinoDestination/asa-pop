@@ -1,8 +1,10 @@
 # Population reporter
 
 > **Setting one up? [Read the setup guide.](SETUP.md)**
-> Ten minutes, no command prompt, and it says which single step is genuinely
-> technical rather than pretending none of them are.
+> About ten minutes, no command prompt, and usually no changes to the server at
+> all — RCON is already on anywhere an admin tool is in use, which is most
+> servers. It says plainly which step is genuinely technical in the case where
+> it is not.
 > [Download the latest release.](https://github.com/DinoDestination/asa-pop/releases/latest)
 
 The rest of this file is how it works and why, for anybody reading the code.

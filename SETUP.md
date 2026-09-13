@@ -8,7 +8,8 @@ Nothing else leaves your machine — just the player count.
 |  |  |
 |---|---|
 | **Time** | about 10 minutes |
-| **Needs** | one server restart |
+| **Changes to your server** | usually none — you probably already have what it needs |
+| **Restart needed?** | only if remote admin turns out to be switched off, which is uncommon |
 | **Runs on** | Windows, the same computer as your server |
 
 **[Download it here.](https://github.com/DinoDestination/asa-pop/releases/latest)**
@@ -24,30 +25,31 @@ can't work around them and it's better to know now.
   or a machine you rent and can open a desktop on. If someone else hosts it for
   you (Nitrado, GPortal, or similar) this program can't be installed and we'll
   need a different approach.
-- You can **open and edit your server's settings file**, or ask whoever set the
-  server up to make one small change for you. This is the only technical part
-  and it's covered in step 1.
+- You can **open your server's settings file and read two lines out of it**, or
+  ask whoever set the server up to read them to you. You almost certainly won't
+  need to change anything.
 - You have **your key from us** — a short line of characters we send you. It's
   what ties the count to your listing. Ask if you don't have one.
 
 ---
 
-## Part one — turn on remote admin
+## Part one — find your admin password, and check remote admin is on
 
 Your server can accept admin commands over the network. That's how asa-pop asks
-"how many people are on?" — it's a standard ARK feature called RCON, and it's
-usually switched off until someone turns it on.
+"how many people are on?" It's a standard ARK feature called RCON, and **if you
+use any admin tool at all it is already switched on** — web control panels,
+Discord admin bots and the various RCON apps all work through it. That's most
+servers.
 
-> [!WARNING]
-> **This part is genuinely technical.** You're editing a settings file by hand.
-> There's no button for it. If that isn't something you want to do, send this
-> section to whoever set your server up — it's a two-minute job for them and
-> they'll know exactly what it means.
+You need to open your settings file anyway, to read your admin password. While
+you're in there you can confirm remote admin in the same glance, which is why
+this is one step rather than two.
 
-**1. Stop your server.** Editing this file while the server is running won't
-work — ARK overwrites it when it shuts down, so your change would disappear.
+> [!NOTE]
+> **You do not need to stop your server to do this.** You're only reading the
+> file. Nothing in this section changes anything.
 
-**2. Find the settings file.** Starting from the folder your server is installed
+**1. Open the settings file.** Starting from the folder your server is installed
 in, go into:
 
 ```
@@ -56,38 +58,48 @@ ShooterGame\Saved\Config\WindowsServer\GameUserSettings.ini
 
 Open it with Notepad. It's a long list of settings in plain text.
 
-**3. Find the line that says `[ServerSettings]`** — square brackets and all.
-There will be many settings listed underneath it.
+If you run your server through a web control panel rather than off a desktop,
+the same settings are usually on a settings page there, labelled something like
+**RCON**, **Enable RCON** or **Admin password**.
 
-**4. Make sure these three lines are there, underneath `[ServerSettings]`.**
-Some may already exist — if so, correct them rather than adding a second copy.
+**2. Find the line that says `[ServerSettings]`** — square brackets and all.
+There will be many settings listed underneath it. The three lines you care about
+are somewhere in that block.
+
+**3. Look for these three, and write down the last two.**
 
 ```ini
 RCONEnabled=True
 RCONPort=27020
-ServerAdminPassword=SomethingLongAndPrivate
+ServerAdminPassword=something-here
 ```
 
-Replace `SomethingLongAndPrivate` with a password of your own. If you already
-have a `ServerAdminPassword`, leave it exactly as it is and just write it down —
-you'll type it once in step 8. Don't leave it blank; the program can't connect
-without one.
+**What you'll almost certainly see:** all three present, `RCONEnabled` set to
+`True`, a port number (27020 is the usual one, but any number is fine — just
+note which), and a password after the `=`. Capitalisation doesn't matter;
+`true` is the same as `True`.
 
-**5. Save the file and start your server again.** The change only takes effect
-on a restart — ARK reads this file when it boots and not afterwards.
+**If that's what you see, you're done here.** Write down the port and the
+password and go to [Part two](#part-two--run-asa-pop-once-by-hand). No changes,
+no restart.
+
+**If it doesn't look like that** — a line is missing entirely, `RCONEnabled` says
+`False`, or there's nothing after `ServerAdminPassword=` — then remote admin is
+off and you're in the uncommon case. See
+[If remote admin is off](#if-remote-admin-is-off) below, then come back here.
 
 ---
 
 ## Part two — run asa-pop once, by hand
 
-This first run is just to prove it can talk to your server. It asks two
-questions and tells you straight away whether it worked.
+This first run proves it can talk to your server. It asks two questions and
+tells you straight away whether it worked.
 
-**6. Make a folder for it** and put it somewhere you'll remember — `C:\asa-pop`
+**4. Make a folder for it** and put it somewhere you'll remember — `C:\asa-pop`
 is fine. Don't use your Downloads folder: the program keeps its settings and its
 log next to itself, and Downloads is a folder people empty.
 
-**7. Download all three files** from
+**5. Download all three files** from
 [the latest release](https://github.com/DinoDestination/asa-pop/releases/latest)
 into that folder — `asa-pop.exe`, `Turn-on-automatic-reporting.bat` and
 `Turn-off-automatic-reporting.bat`. They have to sit together; the two `.bat`
@@ -98,7 +110,7 @@ because the program isn't signed by a big company, not because anything is wrong
 with it. Click **More info**, then **Run anyway**. If you'd rather check it
 first, the release page lists a checksum you can verify.
 
-**8. A small black window opens and asks you two things.** Here's the whole
+**6. A small black window opens and asks you two things.** Here's the whole
 thing — this is all of it:
 
 ```
@@ -112,25 +124,25 @@ Do you run another map on this computer? [y/N]:
 Worked on 1 of your server(s).
 ```
 
-For the port, just press Enter — 27020 is the standard one and almost certainly
-yours. For the password, type the `ServerAdminPassword` from step 4. Nothing
-appears as you type; that's deliberate. Press Enter.
+For the port, press Enter if yours is 27020 — otherwise type the number you
+wrote down. For the password, type the `ServerAdminPassword` you wrote down.
+Nothing appears as you type; that's deliberate. Press Enter.
 
 If you run more than one map on this same computer, answer **y** to the third
 question and it'll ask again for the next one. Otherwise press Enter.
 
-**9. If it says `WORKED`, you're past the hard part.** If it says `DID NOT
+**7. If it says `WORKED`, you're past the hard part.** If it says `DID NOT
 WORK`, the line underneath explains why — and the three most common reasons are
 [at the bottom of this page](#when-it-doesnt-work) with fixes.
 
-**10. Say yes when it offers to save your settings.** Press Enter. It writes a
+**8. Say yes when it offers to save your settings.** Press Enter. It writes a
 small file called `asa-pop.json` next to the program so you never have to type
 the password again.
 
 That file contains your admin password, so it lives on your machine and nowhere
 else. Don't post it, and don't put the folder anywhere shared.
 
-**11. Add your key to that file.** Open `asa-pop.json` in Notepad. Find the part
+**9. Add your key to that file.** Open `asa-pop.json` in Notepad. Find the part
 that says `"key"` and paste the key we sent you between the quote marks, so it
 looks like this:
 
@@ -148,14 +160,14 @@ idea which listing it belongs to, so nothing shows up on the site.
 Right now it only counts when you double-click it. This last part makes Windows
 do it every five minutes on its own.
 
-**12. Double-click `Turn-on-automatic-reporting.bat`.** That's it — no typing.
+**10. Double-click `Turn-on-automatic-reporting.bat`.** That's it — no typing.
 
 It checks your saved settings first and refuses if anything's missing, so it
 won't set up a job that can't work. If it succeeds, Windows runs the reporter
 every five minutes under the name *Dino Destination population reporter*. The
 window stays open so you can read what it says.
 
-**13. Read the last few lines before you close it.** They tell you something
+**11. Read the last few lines before you close it.** They tell you something
 that matters: the job **only runs while you're logged into Windows**. If you log
 out, or the computer restarts and nobody signs back in, the counting stops until
 someone does.
@@ -168,10 +180,47 @@ someone does.
 > behind your back. It's a five-minute job together, and the alternative is a
 > counter that stops without telling you.
 
-`Turn-off-automatic-reporting.bat` undoes step 12 the same way, whenever you
+`Turn-off-automatic-reporting.bat` undoes step 10 the same way, whenever you
 want. Your listing stops showing a live count within 25 minutes and says so; the
 average already recorded stays, because that's history rather than a claim about
 right now.
+
+---
+
+## If remote admin is off
+
+**Most people never need this section.** You're here because Part one showed
+`RCONEnabled=False`, a missing line, or a blank `ServerAdminPassword`.
+
+> [!WARNING]
+> **This part is genuinely technical, and it needs a server restart.** You're
+> editing a settings file by hand and there's no button for it. If that isn't
+> something you want to do, send this section to whoever set your server up —
+> it's a two-minute job for them and they'll know exactly what it means.
+
+**a. Stop your server.** Editing this file while the server is running won't
+work — ARK overwrites it when it shuts down, so your change would disappear.
+This is the most common mistake in the whole setup.
+
+**b. Open `GameUserSettings.ini` again** (the path is in Part one) and find
+`[ServerSettings]`.
+
+**c. Make sure these three lines are there, underneath `[ServerSettings]`.** If
+one already exists but is wrong, correct it rather than adding a second copy.
+
+```ini
+RCONEnabled=True
+RCONPort=27020
+ServerAdminPassword=SomethingLongAndPrivate
+```
+
+Replace `SomethingLongAndPrivate` with a password of your own, and write it
+down. Don't leave it blank; the program can't connect without one.
+
+**d. Save the file and start your server again.** The change only takes effect
+on a restart — ARK reads this file when it boots and not afterwards.
+
+Then go back to [Part two](#part-two--run-asa-pop-once-by-hand).
 
 ---
 
@@ -209,23 +258,26 @@ Three failures account for nearly all of them.
 **Means** — nothing is listening where it knocked. The server is running fine;
 it just isn't accepting admin commands.
 
-**Usually** — **you edited the file but didn't restart the server**, or the
-server was running when you edited it and overwrote your change on shutdown.
-This is the single most common cause, and the message names it. If yours doesn't
-mention restarting, you're on a version before v0.1.2.
+**Check first** — that `RCONPort` really is the number you typed. If your server
+uses something other than 27020, typing the default here is the likeliest
+mistake and costs nothing to rule out.
 
-**Also check** — `RCONEnabled=True` is actually present, it's underneath
-`[ServerSettings]` and not under some other heading further down, and
-`ServerAdminPassword` isn't blank.
+**Then** — if you just turned remote admin on, **did you restart the server?**
+Or was the server running while you edited the file, so it overwrote your change
+on shutdown? Between them those are the most common cause, and the message names
+them.
+
+**Also check** — `RCONEnabled=True` is actually present and underneath
+`[ServerSettings]` rather than some other heading further down. See
+[If remote admin is off](#if-remote-admin-is-off).
 
 **Not the cause** — the port players connect on. That's a different port and
-it's supposed to refuse this. Leave 27020 alone unless you deliberately changed
-`RCONPort` to something else.
+it's supposed to refuse this.
 
 ### "DID NOT WORK" and something about the password
 
 **Means** — it reached your server, your server answered, and it rejected the
-password. Everything else is set up correctly.
+password. Everything else is set up correctly, which is most of the way there.
 
 **Usually** — a typo, or a trailing space copied out of the `.ini` file. Nothing
 shows on screen while you type, so there's no way to spot it as you go — just
@@ -270,11 +322,12 @@ Paste this:
 > that number — one figure, nothing else. No logs, no player names, no files.
 > It's about 5 MB, and the source code is public if you want to look at it.
 >
-> Setup is roughly 10 minutes and needs one server restart. You'll need to be
-> able to edit `GameUserSettings.ini` (or ask whoever set the server up to add
-> three lines), and the server has to run on a Windows machine you can log into
-> — if someone else hosts it for you, this won't work and we'll sort something
-> else out.
+> Setup is about 10 minutes and usually changes nothing on your server — it
+> works through RCON, which you already have on if you use any admin tool. You
+> look up your admin password, run the program once, and double-click one file.
+> The only catch is that the server has to run on a Windows machine you can log
+> into — if someone else hosts it for you, this won't work and we'll sort
+> something else out.
 >
 > Why bother: a listing with a live count gets found. The site can't rank by
 > current players alone and never will, but "4 online now" is the difference
