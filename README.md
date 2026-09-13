@@ -1,5 +1,14 @@
 # Population reporter
 
+> **Setting one up? [Read the setup guide.](SETUP.md)**
+> Ten minutes, no command prompt, and it says which single step is genuinely
+> technical rather than pretending none of them are.
+> [Download the latest release.](https://github.com/DinoDestination/asa-pop/releases/latest)
+
+The rest of this file is how it works and why, for anybody reading the code.
+
+---
+
 A self-hosted ARK: Survival Ascended cluster has no player count anywhere we can
 reach. It is absent from Wildcard's published server list by definition, EOS
 matchmaking answers `policy_missing_action` for the public client, and ASA does
@@ -25,6 +34,10 @@ makes this strictly safer than the RCON *claim* flow, which does ask an owner to
 open a port to us.
 
 ## For an owner: download, double-click, type the password
+
+[SETUP.md](SETUP.md) is the owner-facing version of this section, written for
+somebody who has never opened a terminal. What follows is the reasoning behind
+the design rather than instructions for doing it.
 
 Run with **no arguments and no usable config** — which is what double-clicking a
 fresh download does — and it opens a guided check. It asks for the RCON port

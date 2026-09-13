@@ -135,6 +135,9 @@ jobs:
 
             ### Setup
 
+            **[Full setup guide, written for a non-technical owner.](https://github.com/DinoDestination/asa-pop/blob/main/SETUP.md)**
+            The short version:
+
             Download **`asa-pop.exe` and both `.bat` files into one folder**
             — a folder of its own, not Downloads. The program keeps its
             settings and its log beside itself.
