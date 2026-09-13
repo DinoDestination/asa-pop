@@ -153,6 +153,7 @@ func main() {
 	var (
 		probe     = flag.Bool("probe", false, "check RCON and print the shape of the reply, without reporting anything")
 		raw       = flag.Bool("raw", false, "with --probe, show player names and ids (local only - do not paste this)")
+		wire      = flag.Bool("wire", false, "with --probe, print every RCON packet sent and received (the password is never shown)")
 		install   = flag.Bool("install", false, "create a scheduled task that runs this every 5 minutes")
 		uninstall = flag.Bool("uninstall", false, "remove that scheduled task")
 		showVer   = flag.Bool("version", false, "print the version and exit")
@@ -176,7 +177,8 @@ func main() {
 	}
 
 	switch ChooseMode(
-		Flags{Probe: *probe, Raw: *raw, Install: *install, Uninstall: *uninstall, Version: *showVer},
+		Flags{Probe: *probe || *wire, Raw: *raw, Wire: *wire,
+			Install: *install, Uninstall: *uninstall, Version: *showVer},
 		hasConfig, configUsable, stdinIsConsole(),
 	) {
 	case ModeVersion:
@@ -186,7 +188,7 @@ func main() {
 	case ModeUninstall:
 		os.Exit(doUninstall())
 	case ModeProbe:
-		os.Exit(doProbe(*raw))
+		os.Exit(doProbe(*raw, *wire))
 	case ModeGuided:
 		os.Exit(doGuided())
 	default:
@@ -205,7 +207,7 @@ func main() {
 // It reports the SHAPE: how many frames came back, how many bytes, whether the
 // 4096-byte split was crossed, and what the counter made of it. Names and ids
 // are redacted unless --raw, because this output is meant to be pasted to us.
-func doProbe(raw bool) int {
+func doProbe(raw bool, wire bool) int {
 	fmt.Printf("\nDino Destination population reporter %s\n", version)
 	fmt.Println("PROBE - nothing is reported to anybody, and nothing is changed on your server.")
 	fmt.Println("The only command sent is `ListPlayers`, which is read-only.")
@@ -240,16 +242,32 @@ func doProbe(raw bool) int {
 			continue
 		}
 
-		text, shape, outcome := ListPlayers(s.Host, s.Port, s.Password, rconTimeout)
+		var w *Wire
+		if wire {
+			w = NewWire()
+		}
+		text, shape, outcome := ListPlayersWire(s.Host, s.Port, s.Password, rconTimeout, w)
 		fmt.Printf("    outcome : %s - %s\n", outcome, Explain(outcome))
+
+		// BEFORE THE EARLY RETURN, because a failure is when these matter.
+		fmt.Printf("    frames  : %d\n", shape.Frames)
+		fmt.Printf("    bytes   : %d\n", shape.Bytes)
+		if outcome == OutcomeTimeout && shape.Frames > 0 {
+			fmt.Println("    NOTE    : the server ANSWERED and then went quiet. The reply above")
+			fmt.Println("              arrived; what never did is the end-of-response marker we")
+			fmt.Println("              look for. That is a disagreement about the protocol, not")
+			fmt.Println("              a network or password problem.")
+		}
+		if w != nil {
+			fmt.Println("    wire    :")
+			fmt.Print(w.Render(!raw))
+		}
 		if outcome != OutcomeOK {
 			bad++
 			fmt.Println()
 			continue
 		}
 
-		fmt.Printf("    frames  : %d\n", shape.Frames)
-		fmt.Printf("    bytes   : %d\n", shape.Bytes)
 		fmt.Printf("    split   : %v", shape.Split)
 		if shape.Split {
 			fmt.Printf("  (the reply crossed the 4096-byte boundary and was reassembled)")

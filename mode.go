@@ -33,6 +33,9 @@ const (
 type Flags struct {
 	Probe     bool
 	Raw       bool
+	// --wire implies --probe (main.go ORs them), so this never routes on its
+	// own and ChooseMode needs no new branch.
+	Wire      bool
 	Install   bool
 	Uninstall bool
 	Version   bool

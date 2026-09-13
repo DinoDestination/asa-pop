@@ -103,7 +103,7 @@ func TestProbeWithNoConfigExplainsItselfRatherThanErroring(t *testing.T) {
 	path := noConfigBeside(t)
 
 	var code int
-	out := captureStdout(t, func() { code = doProbe(false) })
+	out := captureStdout(t, func() { code = doProbe(false, false) })
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 - a missing config is not a success", code)
@@ -158,7 +158,7 @@ func TestProbeWithAnEmptyServerListSaysSo(t *testing.T) {
 	configBeside(t, `{"servers":[]}`)
 
 	var code int
-	out := captureStdout(t, func() { code = doProbe(false) })
+	out := captureStdout(t, func() { code = doProbe(false, false) })
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
@@ -184,7 +184,7 @@ func TestProbeRedactsNamesAndIdsInWhatItPrints(t *testing.T) {
 		h, p, password))
 
 	var code int
-	out := captureStdout(t, func() { code = doProbe(false) })
+	out := captureStdout(t, func() { code = doProbe(false, false) })
 
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 - the control answers correctly\n%s", code, out)
@@ -233,7 +233,7 @@ func TestProbeRawShowsWhatRedactionHides(t *testing.T) {
 	configBeside(t, fmt.Sprintf(
 		`{"servers":[{"host":%q,"port":%d,"password":%q,"key":"k"}]}`, h, p, password))
 
-	out := captureStdout(t, func() { _ = doProbe(true) })
+	out := captureStdout(t, func() { _ = doProbe(true, false) })
 
 	if !strings.Contains(out, "Survivor000") {
 		t.Fatalf("--raw did not show a name, so the redaction test proves nothing\n%s", out)
@@ -256,7 +256,7 @@ func TestProbeSaysWhatIsWrongWithoutBlamingThePassword(t *testing.T) {
 	configBeside(t, `{"servers":[{"host":"127.0.0.1","port":1,"password":"x","key":"k"}]}`)
 
 	var code int
-	out := captureStdout(t, func() { code = doProbe(false) })
+	out := captureStdout(t, func() { code = doProbe(false, false) })
 
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)

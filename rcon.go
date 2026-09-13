@@ -190,6 +190,15 @@ type Shape struct {
 // ListPlayers authenticates, runs one read-only command, and returns the WHOLE
 // response.
 func ListPlayers(host string, port int, password string, timeout time.Duration) (string, Shape, Outcome) {
+	return ListPlayersWire(host, port, password, timeout, nil)
+}
+
+// ListPlayersWire is ListPlayers with an optional wire log. `w` may be nil,
+// which is every path except `--probe --wire`, so the reporting run carries no
+// extra cost and no extra place for a credential to go.
+func ListPlayersWire(
+	host string, port int, password string, timeout time.Duration, w *Wire,
+) (string, Shape, Outcome) {
 	// ONE COPY, AND WE OWN IT.
 	secret := []byte(password)
 	defer func() {
@@ -222,7 +231,11 @@ func ListPlayers(host string, port int, password string, timeout time.Duration) 
 
 	const authID, execID, sentinelID = 0x5eec, 0x5eed, 0x5eee
 
-	if _, err := conn.Write(packet(authID, authType, secret)); err != nil {
+	authPkt := packet(authID, authType, secret)
+	// `true` - THIS PACKET CARRIES THE CREDENTIAL. The tracer renders a length
+	// and never the bytes, so there is no path from here to a printed password.
+	w.add(true, authPkt, true)
+	if _, err := conn.Write(authPkt); err != nil {
 		return "", shape, OutcomeOurFault
 	}
 
@@ -234,6 +247,11 @@ func ListPlayers(host string, port int, password string, timeout time.Duration) 
 	for {
 		n, err := conn.Read(read)
 		if n > 0 {
+			// THE RAW READ, not the frames drained from it. Whether two packets
+			// arrived coalesced in one segment, or one arrived split across
+			// two, is exactly the kind of thing a stricter server disagrees
+			// with us about - and draining first would hide it.
+			w.add(false, read[:n], false)
 			buf = append(buf, read[:n]...)
 			var frames []frame
 			frames, buf, err = drain(buf)
@@ -257,13 +275,17 @@ func ListPlayers(host string, port int, password string, timeout time.Duration) 
 						return "", shape, OutcomeBadCredential
 					}
 					authed = true
-					if _, err := conn.Write(packet(execID, execType, []byte(harmlessCommand))); err != nil {
+					execPkt := packet(execID, execType, []byte(harmlessCommand))
+					w.add(true, execPkt, false)
+					if _, err := conn.Write(execPkt); err != nil {
 						return "", shape, OutcomeOurFault
 					}
 					// THE SENTINEL, SENT IMMEDIATELY AFTER. Source has no "this
 					// is the last frame" bit, so the only reliable end marker is
 					// a packet we sent ourselves coming back after the real ones.
-					if _, err := conn.Write(packet(sentinelID, responseValueType, nil)); err != nil {
+					sentinelPkt := packet(sentinelID, responseValueType, nil)
+					w.add(true, sentinelPkt, false)
+					if _, err := conn.Write(sentinelPkt); err != nil {
 						return "", shape, OutcomeOurFault
 					}
 					continue
@@ -286,6 +308,7 @@ func ListPlayers(host string, port int, password string, timeout time.Duration) 
 		if err != nil {
 			var ne net.Error
 			if errors.As(err, &ne) && ne.Timeout() {
+				shape.Split = shape.Frames > 1
 				return "", shape, OutcomeTimeout
 			}
 			// CLOSED WITHOUT AN ANSWER. A game port typically accepts the TCP
