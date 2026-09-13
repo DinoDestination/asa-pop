@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net"
 	"strings"
@@ -187,31 +188,83 @@ func TestClosedPortIsNotACredentialProblem(t *testing.T) {
 
 // A GAME PORT, which accepts TCP and speaks something else entirely. The
 // password must NOT have been sent, and the message must say so.
-func TestWrongProtocolDoesNotBlameThePassword(t *testing.T) {
+// THE MESSAGE USED TO SAY THE PASSWORD WAS NOT SENT. It is, and this test reads
+// it off the wire rather than taking either wording's word for it.
+//
+// Source RCON is client-initiates: there is no greeting to inspect, so the auth
+// packet goes out before anything can be recognised as not-RCON. The fake
+// listener below captures what it received; the assertion is that the sentinel
+// password is in those bytes AND that the message says so. Written the other way
+// round - asserting only the wording - it would have passed just as happily on
+// the false sentence.
+func TestWrongProtocolAdmitsThePasswordWasSent(t *testing.T) {
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
+	const sentinel = "sentinel-password-do-not-leak"
+	received := make(chan []byte, 1)
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
+			received <- nil
 			return
 		}
+		defer conn.Close()
+		// READ FIRST. What arrives here is the whole point of the test.
+		buf := make([]byte, 512)
+		n, _ := conn.Read(buf)
+		received <- append([]byte(nil), buf[:n]...)
 		// Four bytes that are not a plausible frame length.
 		var junk [8]byte
 		binary.LittleEndian.PutUint32(junk[0:], 0xDEADBEEF)
 		_, _ = conn.Write(junk[:])
-		_ = conn.Close()
 	}()
 
 	h, p := hostPort(t, ln.Addr().String())
-	_, _, outcome := ListPlayers(h, p, "anything", 2*time.Second)
+	_, _, outcome := ListPlayers(h, p, sentinel, 2*time.Second)
 	if outcome != OutcomeWrongProtocol {
 		t.Fatalf("outcome = %s, want wrong-protocol", outcome)
 	}
-	if !strings.Contains(Explain(outcome), "NOT sent") {
-		t.Fatal("the wrong-protocol message does not tell the owner their password was not sent")
+
+	// THE WIRE, NOT THE WORDING.
+	select {
+	case got := <-received:
+		if !bytes.Contains(got, []byte(sentinel)) {
+			t.Fatal("the password did not reach a non-RCON listener - if this is now true, " +
+				"the message may go back to saying the password was not sent")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the fake listener never reported what it received")
+	}
+
+	msg := Explain(outcome)
+	if strings.Contains(strings.ToLower(msg), "not sent") {
+		t.Fatalf("the wrong-protocol message still claims the password was not sent, and the "+
+			"bytes above say otherwise: %q", msg)
+	}
+	if !strings.Contains(msg, "WAS sent") {
+		t.Fatalf("the wrong-protocol message does not tell the owner the password was sent: %q", msg)
+	}
+}
+
+// THE ENABLE HINT IS IN THE MESSAGE, not only in the guided flow's summary.
+//
+// That summary prints the RCONEnabled line only when ZERO servers answered, so
+// an owner running two maps with RCON off on one of them read "check RCONPort"
+// and nothing else - a setting that is usually already correct.
+func TestPortClosedSaysHowToTurnRCONOn(t *testing.T) {
+	msg := Explain(OutcomePortClosed)
+	for _, want := range []string{"RCONEnabled=True", "[ServerSettings]", "RCONPort", "RESTARTED"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("the port-closed message does not mention %q: %q", want, msg)
+		}
+	}
+	// THE ONE PLACE THIS CLAIM IS TRUE: DialTimeout failed, so no byte was
+	// written. The wrong-protocol message must not say it; this one must.
+	if !strings.Contains(msg, "Nothing received the password") {
+		t.Fatalf("the port-closed message does not say the password went nowhere: %q", msg)
 	}
 }
 

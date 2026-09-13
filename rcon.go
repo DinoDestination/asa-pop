@@ -79,16 +79,56 @@ func Explain(o Outcome) string {
 		return "the server answered and REFUSED the password. The host and port are right. " +
 			"Check ServerAdminPassword in GameUserSettings.ini."
 	case OutcomePortClosed:
-		return "nothing is listening on that port. The password is fine - check RCONPort " +
-			"(usually 27020). It is not the port players connect on."
+		// THE ENABLE HINT BELONGS HERE, NOT ONLY IN THE GUIDED SUMMARY. That
+		// summary prints the RCONEnabled line only when ZERO servers answered, so
+		// an owner running two maps with RCON off on one of them got this message
+		// with no hint at all - and "check RCONPort" sends them to look at a
+		// setting that is usually already correct. The common cause is that RCON
+		// was never switched on, or was switched on without restarting the server:
+		// ARK reads this file at boot and rewrites it on shutdown, so an edit made
+		// while the server is up is discarded.
+		//
+		// "Nothing received the password" IS TRUE HERE, which is the whole reason
+		// it is said here and not below: DialTimeout failed, so no byte was
+		// written. See the wrong-protocol case for the same sentence being false.
+		return "nothing is listening on that port. Nothing received the password. " +
+			"Check that RCONEnabled=True is under [ServerSettings] in GameUserSettings.ini, " +
+			"that RCONPort matches (usually 27020), and that the server was RESTARTED after " +
+			"the edit - ARK rewrites that file on shutdown, so an edit made while it is " +
+			"running is thrown away. It is not the port players connect on."
 	case OutcomeUnreachable:
 		return "could not reach that address at all. If the server is on this machine, use 127.0.0.1."
 	case OutcomeTimeout:
 		return "something is listening but did not finish the exchange. A firewall that drops " +
 			"rather than refuses looks exactly like this."
 	case OutcomeWrongProtocol:
-		return "something answered, but not the way RCON does - usually the game port or the " +
-			"query port by mistake. Your password was NOT sent anywhere."
+		// THIS SAID "Your password was NOT sent anywhere" AND THAT WAS FALSE.
+		//
+		// `ListPlayers` dials and then writes the auth packet immediately: Source
+		// RCON is client-initiates, so there is no greeting to inspect and nothing
+		// to validate before speaking. By the time anything can be recognised as
+		// not-RCON, the password has already gone to whatever is listening. The
+		// message claimed the opposite in the ONE case where it mattered, which is
+		// worse than saying nothing - an owner who reads it does not rotate a
+		// credential they should.
+		//
+		// THE ALTERNATIVE WAS REJECTED ON MEASUREMENT, not on preference. Probing
+		// first - one non-auth packet, read the reply, only then authenticate -
+		// would make the old sentence true. It also depends on how an
+		// unauthenticated ARK server answers a pre-auth RESPONSE_VALUE, which is
+		// unspecified; if it ignores it we block to the deadline and report
+		// `timeout` on a HEALTHY server. That trades a false sentence in a rare
+		// case for a broken install in the common one.
+		//
+		// So it says what happened, and what it costs. Usually nothing: the port
+		// was the owner's own game or query port, on their own machine, and the
+		// bytes went to their own server process. The case worth acting on is a
+		// port that was not theirs, and only they can tell those apart.
+		return "something answered on that port, but not the way RCON does - usually the game " +
+			"port or the query port by mistake. Use RCONPort (usually 27020). The password WAS " +
+			"sent to whatever answered before it could be recognised: if that was your own " +
+			"server on this machine it went no further, but if the port was not yours, change " +
+			"ServerAdminPassword."
 	default:
 		return "the connection failed in a way we did not expect. This one is on us, not your password."
 	}

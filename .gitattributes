@@ -12,5 +12,12 @@
 
 # Binary, explicitly. `text=auto` gets this right by sniffing and a misdetected
 # binary is a corrupted one - the failure here that does not announce itself.
+# CRLF FOR BATCH FILES, against the repository-wide LF above. cmd.exe is the one
+# consumer here that is not Go: a `.bat` with LF endings works for simple lines
+# and misbehaves on the multi-line constructs both files use, and it does it at
+# RUN time on an owner's machine rather than in CI. These two files exist precisely so a non-technical
+# owner never opens a shell, so they are the last place to accept that risk.
+*.bat text eol=crlf
+
 *.exe binary
 *.png binary

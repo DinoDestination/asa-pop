@@ -37,6 +37,25 @@ opens a window that closes the instant it exits, so without it the whole output
 flashes past and the flow is useless while looking like it worked.
 `TestGuidedAlwaysPauses` covers every exit from it.
 
+**SCHEDULING IS A DOUBLE-CLICK TOO, and it was not.** The guided check needs no
+command line; `--install` did, because a flag cannot be passed by
+double-clicking a program. So the one step that makes this tool actually do its
+job was the one step that required a shell — in a tool whose whole premise is
+that the owner never opens one. `Turn on automatic reporting.bat` and
+`Turn off automatic reporting.bat` ship as release assets beside the binary:
+`cd /d "%~dp0"`, the flag, and a `pause`.
+
+They are checked in rather than generated in the workflow, so `batch_test.go`
+asserts the exact bytes an owner downloads — the `cd`, the flag, the pause, CRLF
+endings, and the guard for the exe being in another folder. The flag is read out
+of the file and checked against `main.go`'s own `flag.Bool` declarations, so
+renaming one without the other fails rather than shipping two double-clickable
+shortcuts to a usage error.
+
+**Both are shipped, not just the one that turns it on.** An owner who can start
+this by double-clicking and would need a command prompt to stop it has been
+handed a trap.
+
 **The password is not echoed, and that is a requirement rather than a polish.**
 The flow ends with "copy what it shows and send it to us", so an echoed password
 would sit in the same window as the text the owner is about to paste into a
@@ -71,6 +90,9 @@ asa-pop.exe --probe --raw  the same, without redacting names and ids (local only
 asa-pop.exe                read the config, report once, exit
 asa-pop.exe --install      scheduled task, every 5 minutes (while you are logged on)
 asa-pop.exe --uninstall    remove it
+
+Turn on automatic reporting.bat    what an owner double-clicks instead of --install
+Turn off automatic reporting.bat   … and instead of --uninstall
 asa-pop.exe --version
 ```
 

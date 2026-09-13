@@ -110,9 +110,17 @@ jobs:
       - name: release
         uses: softprops/action-gh-release@v2
         with:
+          # THE BATCH FILES SHIP AS ASSETS, and they are checked in rather
+          # than generated here so `batch_test.go` can assert on the exact bytes
+          # an owner downloads. Scheduling needs `--install`, a flag cannot be
+          # passed by double-clicking the program, and an owner who will not open
+          # a command prompt is the owner this whole tool is for - so without
+          # these the one step that makes it work was the one step out of reach.
           files: |
             asa-pop.exe
             asa-pop.exe.sha256
+            Turn on automatic reporting.bat
+            Turn off automatic reporting.bat
           body: |
             Dino Destination population reporter — `${{ github.ref_name }}`
 
@@ -127,14 +135,27 @@ jobs:
 
             ### Setup
 
-            1. Download `asa-pop.exe` and put it in a folder of its own.
-            2. **Double-click it.**
-            3. Type your `ServerAdminPassword` when it asks. Typing is hidden.
-            4. Copy what it shows and send it to us.
+            Download **`asa-pop.exe` and both `.bat` files into one folder**
+            — a folder of its own, not Downloads. The program keeps its
+            settings and its log beside itself.
 
-            That is the whole thing - no command prompt needed. Technical users
-            can run `asa-pop.exe --probe` from a shell instead, and
-            `--install` once a key is in place.
+            1. **Double-click `asa-pop.exe`.**
+            2. Type your `ServerAdminPassword` when it asks. Typing is hidden.
+            3. Copy what it shows and send it to us.
+            4. We send back a key. Paste it into `asa-pop.json` next to `"key"`.
+            5. **Double-click `Turn on automatic reporting.bat`.** Done — your
+               listing shows a live count within about five minutes.
+
+            No command prompt at any point. `Turn off automatic reporting.bat`
+            undoes step 5.
+
+            **The two `.bat` files must sit in the same folder as
+            `asa-pop.exe`** — they are separate downloads, so this is the easy
+            one to get wrong. Each one says so and stops rather than failing
+            obscurely.
+
+            Technical users can skip both and run `asa-pop.exe --probe`, then
+            `--install`, from a shell.
 
             RCON is part of a standard ASA setup, so you probably already have
             `RCONEnabled=True` and `RCONPort=27020` in `GameUserSettings.ini`.
